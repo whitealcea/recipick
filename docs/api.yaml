@@ -1,0 +1,521 @@
+openapi: 3.1.1
+info:
+  title: Recipick API
+  version: 1.0.0
+  description: |
+    Personal recipe bookmark API.
+    - Header `Authorization: Bearer <JWT>` is required for all `/v1` endpoints.
+    - Import endpoint returns preview only and never persists.
+servers:
+  - url: http://localhost:8080/v1
+    description: local
+  - url: https://api.example.com/v1
+    description: production placeholder
+security:
+  - BearerAuth: []
+tags:
+  - name: Recipes
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    ErrorBody:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          examples: [validation_error]
+        message:
+          type: string
+          examples: [sourceUrl is required]
+        details:
+          description: optional structured info
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          $ref: '#/components/schemas/ErrorBody'
+    RecipeTag:
+      type: object
+      required: [name, tagType]
+      properties:
+        name:
+          type: string
+          examples: [和食]
+        tagType:
+          type: string
+          enum: [system, user]
+          examples: [system]
+    Recipe:
+      type: object
+      required:
+        - id
+        - sourceUrl
+        - title
+        - ingredients
+        - tags
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+          examples: [aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa]
+        sourceUrl:
+          type: string
+          format: uri
+          examples: [https://example.com/recipes/nikujaga]
+        title:
+          type: string
+          examples: [肉じゃが]
+        note:
+          type: [string, 'null']
+          examples: [醤油は少し控えめに]
+        servings:
+          type: [string, 'null']
+          examples: [2人分]
+        totalMinutes:
+          type: [integer, 'null']
+          minimum: 0
+          examples: [35]
+        ingredients:
+          type: array
+          items:
+            type: string
+          examples:
+            - [じゃがいも, 牛こま切れ肉, 玉ねぎ]
+        tags:
+          type: array
+          items:
+            $ref: '#/components/schemas/RecipeTag'
+        sourceRecipeJsonLd:
+          description: raw Recipe JSON-LD object
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    ImportPreview:
+      type: object
+      required:
+        - sourceUrl
+        - ingredients
+        - systemTags
+        - jsonLdFound
+        - warnings
+      properties:
+        sourceUrl:
+          type: string
+          format: uri
+          examples: [https://example.com/recipes/nikujaga]
+        title:
+          type: [string, 'null']
+          examples: [肉じゃが]
+        servings:
+          type: [string, 'null']
+          examples: [2人分]
+        totalMinutes:
+          type: [integer, 'null']
+          minimum: 0
+          examples: [35]
+        ingredients:
+          type: array
+          items:
+            type: string
+          examples:
+            - [じゃがいも, 牛こま切れ肉, 玉ねぎ]
+        systemTags:
+          type: array
+          items:
+            type: string
+          examples:
+            - [和食, 煮物]
+        rawJsonLd:
+          description: extracted raw Recipe JSON-LD object
+        jsonLdFound:
+          type: boolean
+          examples: [true]
+        warnings:
+          type: array
+          items:
+            type: string
+          examples:
+            - []
+    ImportRequest:
+      type: object
+      required: [sourceUrl]
+      properties:
+        sourceUrl:
+          type: string
+          format: uri
+      examples:
+        basic:
+          value:
+            sourceUrl: https://example.com/recipes/nikujaga
+    CreateRecipeRequest:
+      type: object
+      required: [sourceUrl, title]
+      properties:
+        sourceUrl:
+          type: string
+          format: uri
+        title:
+          type: string
+        note:
+          type: [string, 'null']
+        servings:
+          type: [string, 'null']
+        totalMinutes:
+          type: [integer, 'null']
+          minimum: 0
+        ingredients:
+          type: array
+          items:
+            type: string
+        tags:
+          type: array
+          items:
+            $ref: '#/components/schemas/RecipeTag'
+        sourceRecipeJsonLd:
+          description: optional raw JSON-LD
+      examples:
+        basic:
+          value:
+            sourceUrl: https://example.com/recipes/nikujaga
+            title: 肉じゃが
+            note: 翌日の方が味がなじむ
+            servings: 2人分
+            totalMinutes: 35
+            ingredients: [じゃがいも, 牛こま切れ肉, 玉ねぎ]
+            tags:
+              - name: 和食
+                tagType: system
+              - name: 定番
+                tagType: user
+            sourceRecipeJsonLd:
+              '@type': Recipe
+              name: 肉じゃが
+    UpdateRecipeRequest:
+      type: object
+      description: partial update. send only fields to modify.
+      properties:
+        sourceUrl:
+          type: string
+          format: uri
+        title:
+          type: string
+        note:
+          type: [string, 'null']
+        servings:
+          type: [string, 'null']
+        totalMinutes:
+          type: [integer, 'null']
+          minimum: 0
+        ingredients:
+          type: array
+          items:
+            type: string
+        tags:
+          type: array
+          items:
+            $ref: '#/components/schemas/RecipeTag'
+        sourceRecipeJsonLd:
+          description: optional raw JSON-LD
+      examples:
+        updateTitleOnly:
+          value:
+            title: 肉じゃが（圧力鍋）
+        replaceTags:
+          value:
+            tags:
+              - name: 和食
+                tagType: system
+              - name: 平日夜
+                tagType: user
+    RecipeListResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Recipe'
+paths:
+  /recipes/import:
+    post:
+      tags: [Recipes]
+      summary: Import recipe preview from URL
+      description: |
+        Fetches source URL and parses JSON-LD.
+        This endpoint **never persists** data.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ImportRequest'
+            examples:
+              basic:
+                value:
+                  sourceUrl: https://example.com/recipes/nikujaga
+      responses:
+        '200':
+          description: preview response (jsonLdFound can be false)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportPreview'
+              examples:
+                parsed:
+                  value:
+                    sourceUrl: https://example.com/recipes/nikujaga
+                    title: 肉じゃが
+                    servings: 2人分
+                    totalMinutes: 35
+                    ingredients: [じゃがいも, 牛こま切れ肉, 玉ねぎ]
+                    systemTags: [和食, 煮物]
+                    rawJsonLd:
+                      '@type': Recipe
+                      name: 肉じゃが
+                    jsonLdFound: true
+                    warnings: []
+                fallback:
+                  value:
+                    sourceUrl: https://example.com/no-jsonld
+                    ingredients: []
+                    systemTags: []
+                    jsonLdFound: false
+                    warnings:
+                      - json-ld script not found
+        '400':
+          description: invalid request body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: internal error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /recipes:
+    post:
+      tags: [Recipes]
+      summary: Create recipe
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRecipeRequest'
+      responses:
+        '201':
+          description: created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Recipe'
+        '400':
+          description: validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: duplicate source_url in same user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: internal error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    get:
+      tags: [Recipes]
+      summary: Search recipes
+      parameters:
+        - in: query
+          name: q
+          schema:
+            type: string
+          description: partial match against title and note
+          example: 鶏
+        - in: query
+          name: tags
+          schema:
+            type: string
+          description: comma separated tag names. AND condition.
+          example: 和食,平日夜
+        - in: query
+          name: ingredients
+          schema:
+            type: string
+          description: comma separated ingredient names. AND condition.
+          example: 玉ねぎ,鶏もも肉
+        - in: query
+          name: maxMinutes
+          schema:
+            type: integer
+            minimum: 0
+          example: 30
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        '200':
+          description: search result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecipeListResponse'
+              examples:
+                result:
+                  value:
+                    items:
+                      - id: aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa
+                        sourceUrl: https://example.com/recipes/nikujaga
+                        title: 肉じゃが
+                        note: 翌日の方が味がなじむ
+                        servings: 2人分
+                        totalMinutes: 35
+                        ingredients: [じゃがいも, 牛こま切れ肉, 玉ねぎ]
+                        tags:
+                          - name: 和食
+                            tagType: system
+                        sourceRecipeJsonLd:
+                          '@type': Recipe
+                          name: 肉じゃが
+                        createdAt: '2026-03-30T09:00:00Z'
+                        updatedAt: '2026-03-30T09:00:00Z'
+        '400':
+          description: invalid query
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: internal error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /recipes/{id}:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags: [Recipes]
+      summary: Get recipe by id
+      responses:
+        '200':
+          description: recipe detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Recipe'
+        '400':
+          description: invalid id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: internal error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    patch:
+      tags: [Recipes]
+      summary: Update recipe
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateRecipeRequest'
+      responses:
+        '200':
+          description: updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Recipe'
+        '400':
+          description: validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: duplicate source_url in same user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: internal error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    delete:
+      tags: [Recipes]
+      summary: Delete recipe
+      responses:
+        '204':
+          description: deleted
+        '400':
+          description: invalid id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: internal error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
