@@ -2,6 +2,8 @@ package auth
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
 	"crypto/rsa"
 	"encoding/base64"
 	"encoding/json"
@@ -41,6 +43,9 @@ type jwk struct {
 	Use string `json:"use"`
 	N   string `json:"n"`
 	E   string `json:"e"`
+	X   string `json:"x"`
+	Y   string `json:"y"`
+	CRV string `json:"crv"`
 }
 
 type Middleware struct {
@@ -98,7 +103,7 @@ func (m *Middleware) Handler(next http.Handler) http.Handler {
 
 		claims := &jwt.RegisteredClaims{}
 		parserOptions := []jwt.ParserOption{
-			jwt.WithValidMethods([]string{"RS256"}),
+			jwt.WithValidMethods([]string{"RS256", "ES256"}),
 			jwt.WithIssuer(m.cfg.Issuer),
 			jwt.WithLeeway(m.cfg.Leeway),
 		}
@@ -187,18 +192,24 @@ func (m *Middleware) refreshKeys() error {
 		if strings.TrimSpace(key.KID) == "" {
 			continue
 		}
-		if strings.ToUpper(key.KTY) != "RSA" {
-			continue
+		switch strings.ToUpper(strings.TrimSpace(key.KTY)) {
+		case "RSA":
+			pub, err := parseRSAPublicKey(key.N, key.E)
+			if err != nil {
+				continue
+			}
+			next[key.KID] = pub
+		case "EC":
+			pub, err := parseECPublicKey(key.CRV, key.X, key.Y)
+			if err != nil {
+				continue
+			}
+			next[key.KID] = pub
 		}
-		pub, err := parseRSAPublicKey(key.N, key.E)
-		if err != nil {
-			continue
-		}
-		next[key.KID] = pub
 	}
 
 	if len(next) == 0 {
-		return errors.New("no usable rsa jwk keys in jwks response")
+		return errors.New("no usable jwk keys in jwks response")
 	}
 
 	m.keysByKID = next
@@ -226,6 +237,36 @@ func parseRSAPublicKey(nBase64URL, eBase64URL string) (*rsa.PublicKey, error) {
 	}
 
 	return &rsa.PublicKey{N: modulus, E: int(exponent.Int64())}, nil
+}
+
+func parseECPublicKey(crv, xBase64URL, yBase64URL string) (*ecdsa.PublicKey, error) {
+	var curve elliptic.Curve
+	switch strings.ToUpper(strings.TrimSpace(crv)) {
+	case "P-256":
+		curve = elliptic.P256()
+	default:
+		return nil, fmt.Errorf("unsupported ec curve: %s", crv)
+	}
+
+	xBytes, err := base64.RawURLEncoding.DecodeString(xBase64URL)
+	if err != nil {
+		return nil, err
+	}
+	yBytes, err := base64.RawURLEncoding.DecodeString(yBase64URL)
+	if err != nil {
+		return nil, err
+	}
+	if len(xBytes) == 0 || len(yBytes) == 0 {
+		return nil, errors.New("ec key has empty x/y")
+	}
+
+	x := new(big.Int).SetBytes(xBytes)
+	y := new(big.Int).SetBytes(yBytes)
+	if !curve.IsOnCurve(x, y) {
+		return nil, errors.New("ec key point is not on curve")
+	}
+
+	return &ecdsa.PublicKey{Curve: curve, X: x, Y: y}, nil
 }
 
 type authErrorEnvelope struct {
