@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	_ "github.com/lib/pq"
@@ -39,6 +40,7 @@ func main() {
 		log.Fatal("AUTH_JWT_JWKS_URL is required")
 	}
 	jwtAudience := os.Getenv("AUTH_JWT_AUDIENCE")
+	corsAllowedOrigins := splitCSV(os.Getenv("CORS_ALLOWED_ORIGINS"))
 
 	authMiddleware, err := auth.NewMiddleware(auth.Config{
 		Issuer:        jwtIssuer,
@@ -59,7 +61,23 @@ func main() {
 
 	addr := fmt.Sprintf(":%s", port)
 	log.Printf("listening on %s", addr)
-	if err := http.ListenAndServe(addr, api.NewServer(db, authMiddleware)); err != nil {
+	if err := http.ListenAndServe(addr, api.NewServer(db, authMiddleware, corsAllowedOrigins)); err != nil {
 		log.Fatal(err)
 	}
+}
+
+func splitCSV(value string) []string {
+	if strings.TrimSpace(value) == "" {
+		return nil
+	}
+	parts := strings.Split(value, ",")
+	result := make([]string, 0, len(parts))
+	for _, part := range parts {
+		trimmed := strings.TrimSpace(part)
+		if trimmed == "" {
+			continue
+		}
+		result = append(result, trimmed)
+	}
+	return result
 }

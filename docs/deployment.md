@@ -26,6 +26,7 @@ Render の Environment に以下を設定:
 - `AUTH_JWT_ISSUER`: 例 `https://<supabase-project-ref>.supabase.co/auth/v1`
 - `AUTH_JWT_JWKS_URL`: 例 `https://<supabase-project-ref>.supabase.co/auth/v1/.well-known/jwks.json`
 - `AUTH_JWT_AUDIENCE`: 例 `authenticated`（利用しない場合は未設定可）
+- `CORS_ALLOWED_ORIGINS`: 例 `https://recipick-theta.vercel.app`（複数はカンマ区切り）
 - `PORT`: 未設定で可（Render が自動で注入）
 
 ### 2.3 デプロイ確認

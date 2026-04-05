@@ -5,6 +5,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -41,10 +42,23 @@ func allowDevOrigin(origin string) bool {
 	return ip.IsPrivate() || ip.IsLoopback()
 }
 
-func NewServer(db *sql.DB, authMiddleware *auth.Middleware) http.Handler {
+func originAllowSet(origins []string) map[string]struct{} {
+	set := make(map[string]struct{}, len(origins))
+	for _, origin := range origins {
+		normalized := strings.TrimSpace(origin)
+		if normalized == "" {
+			continue
+		}
+		set[normalized] = struct{}{}
+	}
+	return set
+}
+
+func NewServer(db *sql.DB, authMiddleware *auth.Middleware, allowedOrigins []string) http.Handler {
 	repo := repository.NewRecipeRepository(db)
 	importer := service.NewJSONLDImporter()
 	recipeHandler := handler.NewRecipeHandler(repo, importer)
+	allowedOriginSet := originAllowSet(allowedOrigins)
 
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
@@ -53,6 +67,9 @@ func NewServer(db *sql.DB, authMiddleware *auth.Middleware) http.Handler {
 	r.Use(middleware.Timeout(15 * time.Second))
 	r.Use(cors.Handler(cors.Options{
 		AllowOriginFunc: func(_ *http.Request, origin string) bool {
+			if _, ok := allowedOriginSet[origin]; ok {
+				return true
+			}
 			return allowDevOrigin(origin)
 		},
 		AllowedMethods: []string{"GET", "POST", "PATCH", "DELETE", "OPTIONS"},
