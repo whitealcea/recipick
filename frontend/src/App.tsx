@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { ReactElement } from 'react';
-import { Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
+import { Link, Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
 import { useAuth } from './auth/AuthContext';
 import { RecipeDetailPage } from './pages/RecipeDetailPage';
 import { RecipeEditPage } from './pages/RecipeEditPage';
@@ -53,21 +53,28 @@ const ProtectedLayout = () => {
     <>
       <header className="auth-nav">
         <div className="auth-nav-inner">
-          <span className="muted">{userEmail ? `ログイン中: ${userEmail}` : 'ログイン中'}</span>
-          <button
-            type="button"
-            onClick={async () => {
-              setIsSigningOut(true);
-              try {
-                await signOut();
-              } finally {
-                setIsSigningOut(false);
-              }
-            }}
-            disabled={isSigningOut}
-          >
-            {isSigningOut ? 'ログアウト中...' : 'ログアウト'}
-          </button>
+          <Link to="/recipes" className="brand-link" aria-label="レシピ一覧へ戻る">
+            <img src="/recipick-icon.svg" alt="" className="brand-icon" />
+            <span>Recipick</span>
+          </Link>
+
+          <div className="auth-nav-actions">
+            <span className="muted">{userEmail ? `ログイン中: ${userEmail}` : 'ログイン中'}</span>
+            <button
+              type="button"
+              onClick={async () => {
+                setIsSigningOut(true);
+                try {
+                  await signOut();
+                } finally {
+                  setIsSigningOut(false);
+                }
+              }}
+              disabled={isSigningOut}
+            >
+              {isSigningOut ? 'ログアウト中...' : 'ログアウト'}
+            </button>
+          </div>
         </div>
       </header>
       <Outlet />
