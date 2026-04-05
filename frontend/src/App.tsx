@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { ReactElement } from 'react';
 import { Link, Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
+import recipickIconUrl from './assets/recipick-icon.svg';
 import { useAuth } from './auth/AuthContext';
 import { RecipeDetailPage } from './pages/RecipeDetailPage';
 import { RecipeEditPage } from './pages/RecipeEditPage';
@@ -54,7 +55,7 @@ const ProtectedLayout = () => {
       <header className="auth-nav">
         <div className="auth-nav-inner">
           <Link to="/recipes" className="brand-link" aria-label="レシピ一覧へ戻る">
-            <img src="/recipick-icon.svg" alt="" className="brand-icon" />
+            <img src={recipickIconUrl} alt="" className="brand-icon" />
             <span>Recipick</span>
           </Link>
 
